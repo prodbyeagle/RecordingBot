@@ -41,7 +41,7 @@ export const db = {
     // Aufnahmen
     async addRecording(recording: Omit<Recording, 'id' | 'created_at'>): Promise<Recording> {
         try {
-            console.log('Adding recording:', recording);
+            console.log('💾 Speichere neue Aufnahme');
             const { data, error } = await supabase
                 .from('recordings')
                 .insert([recording])
@@ -49,32 +49,21 @@ export const db = {
                 .single();
 
             if (error) {
-                console.error('Error adding recording:', {
-                    error: error.message,
-                    details: error.details,
-                    hint: error.hint,
-                    recording
-                });
+                console.error('❌ Fehler beim Speichern der Aufnahme:', error.message);
                 throw error;
             }
 
-            console.log('Recording added successfully:', data);
+            console.log('✅ Aufnahme erfolgreich gespeichert');
             return data as Recording;
         } catch (error) {
-            console.error('Critical error in addRecording:', {
-                error: error instanceof Error ? {
-                    message: error.message,
-                    stack: error.stack
-                } : error,
-                recording
-            });
+            console.error('⚠️ Kritischer Fehler beim Speichern der Aufnahme:', error instanceof Error ? error.message : error);
             throw error;
         }
     },
 
     async getRecordings(guildId: string): Promise<Recording[]> {
         try {
-            console.log(`Fetching recordings for guild ${guildId}`);
+            console.log(`🎵 Lade Aufnahmen für Server ${guildId}`);
             const { data, error } = await supabase
                 .from('recordings')
                 .select('*')
@@ -82,24 +71,13 @@ export const db = {
                 .order('created_at', { ascending: false });
 
             if (error) {
-                console.error('Error fetching recordings:', {
-                    error: error.message,
-                    details: error.details,
-                    hint: error.hint,
-                    guildId
-                });
+                console.error('❌ Fehler beim Laden der Aufnahmen:', error.message);
                 throw error;
             }
 
             return data as Recording[] || [];
         } catch (error) {
-            console.error('Critical error in getRecordings:', {
-                error: error instanceof Error ? {
-                    message: error.message,
-                    stack: error.stack
-                } : error,
-                guildId
-            });
+            console.error('⚠️ Kritischer Fehler beim Laden der Aufnahmen:', error instanceof Error ? error.message : error);
             throw error;
         }
     },
@@ -109,7 +87,7 @@ export const db = {
             const cutoffDate = new Date();
             cutoffDate.setDate(cutoffDate.getDate() - daysOld);
             
-            console.log(`Deleting recordings older than ${daysOld} days (${cutoffDate.toISOString()})`);
+            console.log(`🗑️ Lösche Aufnahmen älter als ${daysOld} Tage (${cutoffDate.toISOString()})`);
             
             const { data, error } = await supabase
                 .from('recordings')
@@ -118,27 +96,15 @@ export const db = {
                 .select();
 
             if (error) {
-                console.error('Error deleting old recordings:', {
-                    error: error.message,
-                    details: error.details,
-                    hint: error.hint,
-                    daysOld,
-                    cutoffDate
-                });
+                console.error('❌ Fehler beim Löschen alter Aufnahmen:', error.message);
                 throw error;
             }
 
             const deletedCount = data?.length || 0;
-            console.log(`Successfully deleted ${deletedCount} old recordings`);
+            console.log(`✅ ${deletedCount} alte Aufnahmen erfolgreich gelöscht`);
             return data as Recording[] || [];
         } catch (error) {
-            console.error('Critical error in deleteOldRecordings:', {
-                error: error instanceof Error ? {
-                    message: error.message,
-                    stack: error.stack
-                } : error,
-                daysOld
-            });
+            console.error('⚠️ Kritischer Fehler beim Löschen alter Aufnahmen:', error instanceof Error ? error.message : error);
             throw error;
         }
     },
@@ -146,7 +112,7 @@ export const db = {
     // Auto-Join Users
     async addAutoJoinUser(user: Omit<AutoJoinUser, 'id' | 'created_at'>): Promise<AutoJoinUser> {
         try {
-            console.log('Adding auto-join user:', user);
+            console.log('👥 Füge Auto-Join Benutzer hinzu');
             const { data, error } = await supabase
                 .from('auto_join_users')
                 .insert([user])
@@ -154,32 +120,21 @@ export const db = {
                 .single();
 
             if (error) {
-                console.error('Error adding auto-join user:', {
-                    error: error.message,
-                    details: error.details,
-                    hint: error.hint,
-                    user
-                });
+                console.error('❌ Fehler beim Hinzufügen des Auto-Join Benutzers:', error.message);
                 throw error;
             }
 
-            console.log('Auto-join user added successfully:', data);
+            console.log('✅ Auto-Join Benutzer erfolgreich hinzugefügt');
             return data as AutoJoinUser;
         } catch (error) {
-            console.error('Critical error in addAutoJoinUser:', {
-                error: error instanceof Error ? {
-                    message: error.message,
-                    stack: error.stack
-                } : error,
-                user
-            });
+            console.error('⚠️ Kritischer Fehler beim Hinzufügen des Auto-Join Benutzers:', error instanceof Error ? error.message : error);
             throw error;
         }
     },
 
     async removeAutoJoinUser(userId: string, guildId: string): Promise<AutoJoinUser[]> {
         try {
-            console.log(`Removing auto-join user: ${userId} from guild ${guildId}`);
+            console.log(`🚫 Entferne Auto-Join Benutzer: ${userId} von Server ${guildId}`);
             const { data, error } = await supabase
                 .from('auto_join_users')
                 .delete()
@@ -187,65 +142,41 @@ export const db = {
                 .select();
 
             if (error) {
-                console.error('Error removing auto-join user:', {
-                    error: error.message,
-                    details: error.details,
-                    hint: error.hint,
-                    userId,
-                    guildId
-                });
+                console.error('❌ Fehler beim Entfernen des Auto-Join Benutzers:', error.message);
                 throw error;
             }
 
-            console.log('Auto-join user removed successfully');
+            console.log('✅ Auto-Join Benutzer erfolgreich entfernt');
             return data as AutoJoinUser[] || [];
         } catch (error) {
-            console.error('Critical error in removeAutoJoinUser:', {
-                error: error instanceof Error ? {
-                    message: error.message,
-                    stack: error.stack
-                } : error,
-                userId,
-                guildId
-            });
+            console.error('⚠️ Kritischer Fehler beim Entfernen des Auto-Join Benutzers:', error instanceof Error ? error.message : error);
             throw error;
         }
     },
 
     async getAutoJoinUsers(guildId: string): Promise<AutoJoinUser[]> {
         try {
-            console.log(`Fetching auto-join users for guild ${guildId}`);
+            console.log(`👥 Lade Auto-Join Benutzer für Server ${guildId}`);
             const { data, error } = await supabase
                 .from('auto_join_users')
                 .select('*')
                 .eq('guild_id', guildId);
 
             if (error) {
-                console.error('Error fetching auto-join users:', {
-                    error: error.message,
-                    details: error.details,
-                    hint: error.hint,
-                    guildId
-                });
+                console.error('❌ Fehler beim Laden der Auto-Join Benutzer:', error.message);
                 throw error;
             }
 
             return data as AutoJoinUser[] || [];
         } catch (error) {
-            console.error('Critical error in getAutoJoinUsers:', {
-                error: error instanceof Error ? {
-                    message: error.message,
-                    stack: error.stack
-                } : error,
-                guildId
-            });
+            console.error('⚠️ Kritischer Fehler beim Laden der Auto-Join Benutzer:', error instanceof Error ? error.message : error);
             throw error;
         }
     },
 
     async isAutoJoinUser(userId: string, guildId: string): Promise<boolean> {
         try {
-            console.log(`Checking if user ${userId} is auto-join user in guild ${guildId}`);
+            console.log(`🔍 Prüfe Auto-Join Status für Benutzer ${userId} auf Server ${guildId}`);
             const { data, error } = await supabase
                 .from('auto_join_users')
                 .select('*')
@@ -253,26 +184,13 @@ export const db = {
                 .single();
 
             if (error && error.code !== 'PGRST116') { // Ignore "not found" error
-                console.error('Error checking auto-join user:', {
-                    error: error.message,
-                    details: error.details,
-                    hint: error.hint,
-                    userId,
-                    guildId
-                });
+                console.error('❌ Fehler beim Prüfen des Auto-Join Status:', error.message);
                 throw error;
             }
 
             return !!data;
         } catch (error) {
-            console.error('Critical error in isAutoJoinUser:', {
-                error: error instanceof Error ? {
-                    message: error.message,
-                    stack: error.stack
-                } : error,
-                userId,
-                guildId
-            });
+            console.error('⚠️ Kritischer Fehler beim Prüfen des Auto-Join Status:', error instanceof Error ? error.message : error);
             throw error;
         }
     }

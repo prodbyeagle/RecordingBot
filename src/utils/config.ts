@@ -28,10 +28,10 @@ function validateConfig(): BotConfig {
     const supabaseKey = process.env.SUPABASE_KEY;
     const logChannelId = process.env.LOG_CHANNEL_ID;
 
-    if (!token) throw new Error('DISCORD_TOKEN is required');
-    if (!supabaseUrl) throw new Error('SUPABASE_URL is required');
-    if (!supabaseKey) throw new Error('SUPABASE_KEY is required');
-    if (!logChannelId) throw new Error('LOG_CHANNEL_ID is required');
+    if (!token) throw new Error('⚠️ DISCORD_TOKEN wird benötigt');
+    if (!supabaseUrl) throw new Error('⚠️ SUPABASE_URL wird benötigt');
+    if (!supabaseKey) throw new Error('⚠️ SUPABASE_KEY wird benötigt');
+    if (!logChannelId) throw new Error('⚠️ LOG_CHANNEL_ID wird benötigt');
 
     return {
         token,

@@ -83,7 +83,7 @@ export class AudioRecorder {
         
         return new Promise((resolve, reject) => {
             if (!existsSync(config.ffmpegOptions.path)) {
-                reject(new Error(`FFmpeg not found at path: ${config.ffmpegOptions.path}`));
+                reject(new Error(`❌ FFmpeg nicht gefunden unter: ${config.ffmpegOptions.path}`));
                 return;
             }
 
@@ -96,15 +96,13 @@ export class AudioRecorder {
                 '-q:a', '4',
                 mp3Path
             ]);
-
-            ffmpeg.stderr.on('data', (data) => console.log('FFmpeg:', data.toString()));
             
             ffmpeg.on('close', async (code) => {
                 if (code === 0) {
                     await fs.unlink(pcmPath);
                     resolve(mp3Path);
                 } else {
-                    reject(new Error(`FFmpeg exited with code ${code}`));
+                    reject(new Error(`❌ FFmpeg beendet mit Code ${code}`));
                 }
             });
 
@@ -171,17 +169,17 @@ export class AudioRecorder {
                     });
 
                     audioStream.on('error', (error: Error) => 
-                        console.error(`Audio stream error (${userId}):`, error));
+                        console.error(`❌ Audiostreamfehler (${userId}):`, error.message));
                     opusDecoder.on('error', (error: Error) => 
-                        console.error(`Opus decoder error (${userId}):`, error));
+                        console.error(`❌ Opus-Decoderfehler (${userId}):`, error.message));
                     fileStream.on('error', (error: Error) => 
-                        console.error(`File stream error (${userId}):`, error));
+                        console.error(`❌ Dateistreamfehler (${userId}):`, error.message));
 
                     await pipeline(audioStream, opusDecoder, fileStream).catch(error => 
-                        console.error(`Pipeline error (${userId}):`, error));
+                        console.error(`❌ Pipeline-Fehler (${userId}):`, error instanceof Error ? error.message : error));
                 }
             } catch (error) {
-                console.error('Recording setup error:', error);
+                console.error('⚠️ Fehler beim Aufnahme-Setup:', error instanceof Error ? error.message : error);
             }
         });
 
@@ -224,7 +222,7 @@ export class AudioRecorder {
                             recorded_by: userRecording.user.username
                         });
                     } catch (error) {
-                        console.error(`Error processing recording for user ${userId}:`, error);
+                        console.error(`⚠️ Fehler bei der Verarbeitung der Aufnahme für Benutzer ${userId}:`, error instanceof Error ? error.message : error);
                     }
                 })
             );
@@ -232,7 +230,7 @@ export class AudioRecorder {
             recording.connection.destroy();
             this.recordings.delete(guildId);
         } catch (error) {
-            console.error('Error stopping recording:', error);
+            console.error('⚠️ Fehler beim Stoppen der Aufnahme:', error instanceof Error ? error.message : error);
             throw error;
         }
     }

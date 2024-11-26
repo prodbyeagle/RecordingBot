@@ -18,8 +18,8 @@ export interface RecordingEvent {
 export function createRecordingEmbed(events: RecordingEvent[]) {
     const embed = new EmbedBuilder()
         .setColor('#FF0000')
-        .setTitle('🎙️ Active Recording Session')
-        .setDescription('A voice channel recording is in progress.')
+        .setTitle('🎙️ Aktive Aufnahme')
+        .setDescription('Eine Sprachkanal-Aufnahme ist im Gange.')
         .setTimestamp();
 
     // Add audit log field
@@ -28,13 +28,13 @@ export function createRecordingEmbed(events: RecordingEvent[]) {
             const timestamp = event.timestamp.toLocaleTimeString();
             switch (event.type) {
                 case 'START':
-                    return `\`${timestamp}\` 📱 Recording started`;
+                    return `\`${timestamp}\` 🎥 Aufnahme gestartet`;
                 case 'END':
-                    return `\`${timestamp}\` ⏹️ Recording ended`;
+                    return `\`${timestamp}\` ⏹️ Aufnahme beendet`;
                 case 'JOIN':
-                    return `\`${timestamp}\` ➡️ ${event.user?.tag} joined`;
+                    return `\`${timestamp}\` ➡️ ${event.user?.tag} ist beigetreten`;
                 case 'LEAVE':
-                    return `\`${timestamp}\` ⬅️ ${event.user?.tag} left`;
+                    return `\`${timestamp}\` ⬅️ ${event.user?.tag} hat verlassen`;
                 default:
                     return '';
             }
@@ -43,8 +43,8 @@ export function createRecordingEmbed(events: RecordingEvent[]) {
         .join('\n');
 
     embed.addFields({ 
-        name: '📝 Session Log', 
-        value: auditLog || 'No events yet'
+        name: '📝 Sitzungsprotokoll', 
+        value: auditLog || 'Noch keine Ereignisse'
     });
 
     return embed;
@@ -69,13 +69,13 @@ export function updateRecordingEmbed(embed: EmbedBuilder, events: RecordingEvent
             const timestamp = event.timestamp.toLocaleTimeString();
             switch (event.type) {
                 case 'START':
-                    return `\`${timestamp}\` 📱 Recording started`;
+                    return `\`${timestamp}\` 🎥 Aufnahme gestartet`;
                 case 'END':
-                    return `\`${timestamp}\` ⏹️ Recording ended`;
+                    return `\`${timestamp}\` ⏹️ Aufnahme beendet`;
                 case 'JOIN':
-                    return `\`${timestamp}\` ➡️ ${event.user?.tag} joined`;
+                    return `\`${timestamp}\` ➡️ ${event.user?.tag} ist beigetreten`;
                 case 'LEAVE':
-                    return `\`${timestamp}\` ⬅️ ${event.user?.tag} left`;
+                    return `\`${timestamp}\` ⬅️ ${event.user?.tag} hat verlassen`;
                 default:
                     return '';
             }
@@ -84,8 +84,8 @@ export function updateRecordingEmbed(embed: EmbedBuilder, events: RecordingEvent
         .join('\n');
 
     embed.spliceFields(0, 1, { 
-        name: '📝 Session Log', 
-        value: auditLog || 'No events yet'
+        name: '📝 Sitzungsprotokoll', 
+        value: auditLog || 'Noch keine Ereignisse'
     });
 
     return embed;
