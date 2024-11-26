@@ -17,8 +17,15 @@ export interface AutoJoinUser {
     id: number;
     user_id: string;
     guild_id: string;
-    channel_id: string;
     created_at: string;
+}
+
+export interface BotConfig {
+    id: number;
+    guild_id: string;
+    log_channel_id: string;
+    created_at: string;
+    updated_at: string;
 }
 
 // Erstelle den Supabase-Client mit Service Role Key
@@ -27,11 +34,7 @@ const supabase = createClient(
     config.supabaseKey,
     {
         auth: {
-            autoRefreshToken: true,
-            persistSession: true
-        },
-        db: {
-            schema: 'public'
+            persistSession: false
         }
     }
 );
@@ -127,7 +130,7 @@ export const db = {
             console.log('✅ Auto-Join Benutzer erfolgreich hinzugefügt');
             return data as AutoJoinUser;
         } catch (error) {
-            console.error('⚠️ Kritischer Fehler beim Hinzufügen des Auto-Join Benutzers:', error instanceof Error ? error.message : error);
+            console.error('⚠️ Kritischer Fehler beim Hinzufügen des Auto-Join Benutzers:', error);
             throw error;
         }
     },
@@ -193,5 +196,77 @@ export const db = {
             console.error('⚠️ Kritischer Fehler beim Prüfen des Auto-Join Status:', error instanceof Error ? error.message : error);
             throw error;
         }
-    }
+    },
+
+    // Bot Konfiguration
+    async getGuildConfig(guildId: string): Promise<BotConfig | null> {
+        try {
+            console.log(`⚙️ Lade Konfiguration für Server ${guildId}`);
+            const { data, error } = await supabase
+                .from('bot_config')
+                .select('*')
+                .eq('guild_id', guildId)
+                .single();
+
+            if (error) {
+                if (error.code === 'PGRST116') { // Keine Konfiguration gefunden
+                    return null;
+                }
+                console.error('❌ Fehler beim Laden der Konfiguration:', error.message);
+                throw error;
+            }
+
+            return data;
+        } catch (error) {
+            console.error('⚠️ Kritischer Fehler beim Laden der Konfiguration:', error instanceof Error ? error.message : error);
+            throw error;
+        }
+    },
+
+    async updateGuildConfig(guildId: string, config: Partial<Omit<BotConfig, 'id' | 'created_at' | 'guild_id'>>): Promise<BotConfig> {
+        try {
+            const existingConfig = await this.getGuildConfig(guildId);
+            
+            if (!existingConfig) {
+                // Erstelle neue Konfiguration
+                const { data, error } = await supabase
+                    .from('bot_config')
+                    .insert([{
+                        guild_id: guildId,
+                        ...config,
+                        updated_at: new Date().toISOString()
+                    }])
+                    .select()
+                    .single();
+
+                if (error) {
+                    console.error('❌ Fehler beim Erstellen der Konfiguration:', error.message);
+                    throw error;
+                }
+
+                return data;
+            }
+
+            // Aktualisiere bestehende Konfiguration
+            const { data, error } = await supabase
+                .from('bot_config')
+                .update({
+                    ...config,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('guild_id', guildId)
+                .select()
+                .single();
+
+            if (error) {
+                console.error('❌ Fehler beim Aktualisieren der Konfiguration:', error.message);
+                throw error;
+            }
+
+            return data;
+        } catch (error) {
+            console.error('⚠️ Kritischer Fehler beim Aktualisieren der Konfiguration:', error instanceof Error ? error.message : error);
+            throw error;
+        }
+    },
 };

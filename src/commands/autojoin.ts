@@ -91,11 +91,10 @@ async function handleAddUser(interaction: ChatInputCommandInteraction): Promise<
     const user = interaction.options.getUser('user', true);
     const guildId = interaction.guildId!;
     
-    const guildSettings = await settings.getGuildSettings(guildId);
-    const autoJoinUsers = new Set(guildSettings?.auto_join_users || []);
-    
-    autoJoinUsers.add(user.id);
-    await settings.updateGuildSettings(guildId, { auto_join_users: Array.from(autoJoinUsers) });
+    await db.addAutoJoinUser({
+        user_id: user.id,
+        guild_id: guildId
+    });
     
     await interaction.editReply({ content: MESSAGES.USER_ADDED(user) });
 }
@@ -108,17 +107,13 @@ async function handleRemoveUser(interaction: ChatInputCommandInteraction): Promi
     const user = interaction.options.getUser('user', true);
     const guildId = interaction.guildId!;
     
-    const guildSettings = await settings.getGuildSettings(guildId);
-    const autoJoinUsers = new Set(guildSettings?.auto_join_users || []);
-    
-    if (!autoJoinUsers.has(user.id)) {
+    const isAutoJoinUser = await db.isAutoJoinUser(user.id, guildId);
+    if (!isAutoJoinUser) {
         await interaction.editReply({ content: MESSAGES.USER_NOT_FOUND(user) });
         return;
     }
     
-    autoJoinUsers.delete(user.id);
-    await settings.updateGuildSettings(guildId, { auto_join_users: Array.from(autoJoinUsers) });
-    
+    await db.removeAutoJoinUser(user.id, guildId);
     await interaction.editReply({ content: MESSAGES.USER_REMOVED(user) });
 }
 
@@ -128,8 +123,7 @@ async function handleRemoveUser(interaction: ChatInputCommandInteraction): Promi
  */
 async function handleListUsers(interaction: ChatInputCommandInteraction): Promise<void> {
     const guildId = interaction.guildId!;
-    const guildSettings = await settings.getGuildSettings(guildId);
-    const autoJoinUsers = guildSettings?.auto_join_users || [];
+    const autoJoinUsers = await db.getAutoJoinUsers(guildId);
     
     if (autoJoinUsers.length === 0) {
         await interaction.editReply({ content: MESSAGES.NO_USERS });
@@ -137,12 +131,12 @@ async function handleListUsers(interaction: ChatInputCommandInteraction): Promis
     }
     
     const userList = await Promise.all(
-        autoJoinUsers.map(async (userId) => {
+        autoJoinUsers.map(async (dbUser) => {
             try {
-                const user = await interaction.client.users.fetch(userId);
+                const user = await interaction.client.users.fetch(dbUser.user_id);
                 return `- ${user.tag}`;
             } catch {
-                return `- Unknown User (${userId})`;
+                return `- Unbekannter User (${dbUser.user_id})`;
             }
         })
     );

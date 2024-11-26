@@ -18,7 +18,7 @@ const BOT_PRESENCE = {
     activities: [{
         type: ActivityType.Custom,
         name: "EAGLE RECORDER",
-        state: "🦅 Recording your voice!"
+        state: " Recording your voice!"
     }]
 };
 
@@ -37,7 +37,7 @@ new AudioRecorder();
  * @param error - The error that occurred
  */
 async function handleCommandError(interaction: ChatInputCommandInteraction, error: unknown): Promise<void> {
-    console.error('❌ Fehler bei der Ausführung des Befehls:', error instanceof Error ? error.message : error);
+    console.error(' Fehler bei der Ausführung des Befehls:', error instanceof Error ? error.message : error);
     
     const errorMessage = {
         content: 'Es ist ein Fehler beim Ausführen des Befehls aufgetreten.',
@@ -51,7 +51,7 @@ async function handleCommandError(interaction: ChatInputCommandInteraction, erro
             await interaction.reply(errorMessage);
         }
     } catch (e) {
-        console.error('❌ Fehler beim Senden der Fehlermeldung:', e instanceof Error ? e.message : e);
+        console.error(' Fehler beim Senden der Fehlermeldung:', e instanceof Error ? e.message : e);
     }
 }
 
@@ -74,12 +74,12 @@ async function handleCommand(interaction: Interaction): Promise<void> {
 
 // Initialize bot events
 client.once(Events.ClientReady, async () => {
-    console.log(`🚀 Bot ist bereit! Eingeloggt als ${client.user?.tag}`);
+    console.log(` Bot ist bereit! Eingeloggt als ${client.user?.tag}`);
     
     try {
         // Set custom status
         client.user?.setPresence(BOT_PRESENCE);
-        console.log('✅ Bot-Status erfolgreich aktualisiert');
+        console.log(' Bot-Status erfolgreich aktualisiert');
         
         // Register slash commands
         if (!client.application) {
@@ -87,9 +87,9 @@ client.once(Events.ClientReady, async () => {
         }
         
         await client.application.commands.set(commandsData);
-        console.log('✅ Slash-Befehle erfolgreich registriert');
+        console.log(' Slash-Befehle erfolgreich registriert');
     } catch (error) {
-        console.error('❌ Fehler bei der Bot-Initialisierung:', error instanceof Error ? error.message : error);
+        console.error(' Fehler bei der Bot-Initialisierung:', error instanceof Error ? error.message : error);
     }
 });
 
@@ -103,7 +103,7 @@ client.on(Events.VoiceStateUpdate, handleVoiceStateUpdate);
  */
 export const startBot = (): void => {
     client.login(config.token).catch(error => {
-        console.error('❌ Bot konnte nicht gestartet werden:', error instanceof Error ? error.message : error);
+        console.error(' Bot konnte nicht gestartet werden:', error instanceof Error ? error.message : error);
         process.exit(1);
     });
 };
