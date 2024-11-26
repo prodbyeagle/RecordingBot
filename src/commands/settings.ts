@@ -1,152 +1,94 @@
-import { 
-    ChatInputCommandInteraction, 
-    SlashCommandBuilder, 
-    PermissionFlagsBits,
-    ChannelType
-} from 'discord.js';
-import { settings } from '../utils/settings';
+import { ChatInputCommandInteraction, SlashCommandBuilder, PermissionFlagsBits, ChannelType, EmbedBuilder } from 'discord.js';
+import { configManager } from '../utils/configManager';
 
 export const data = new SlashCommandBuilder()
     .setName('settings')
-    .setDescription('Verwalte die Bot-Einstellungen')
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+    .setDescription('Configure bot settings')
     .addSubcommand(subcommand =>
         subcommand
-            .setName('channel')
-            .setDescription('Setze den Voice-Channel für Aufnahmen')
+            .setName('recording')
+            .setDescription('Configure recording settings')
+            .addStringOption(option =>
+                option
+                    .setName('format')
+                    .setDescription('Recording format')
+                    .addChoices(
+                        { name: 'WAV', value: 'wav' },
+                        { name: 'OGG', value: 'ogg' },
+                        { name: 'MP3', value: 'mp3' }
+                    )
+            )
+            .addIntegerOption(option =>
+                option
+                    .setName('bitrate')
+                    .setDescription('Recording bitrate (kbps)')
+                    .setMinValue(64)
+                    .setMaxValue(384)
+            )
+            .addBooleanOption(option =>
+                option
+                    .setName('noise_suppression')
+                    .setDescription('Enable noise suppression')
+            )
+    )
+    .addSubcommand(subcommand =>
+        subcommand
+            .setName('logs')
+            .setDescription('Configure log channel')
             .addChannelOption(option =>
                 option
                     .setName('channel')
-                    .setDescription('Der Voice-Channel')
+                    .setDescription('Channel for bot logs')
                     .setRequired(true)
-                    .addChannelTypes(ChannelType.GuildVoice)
+                    .addChannelTypes(ChannelType.GuildText)
             )
     )
-    .addSubcommand(subcommand =>
-        subcommand
-            .setName('maxlength')
-            .setDescription('Setze die maximale Aufnahmedauer in Stunden')
-            .addIntegerOption(option =>
-                option
-                    .setName('hours')
-                    .setDescription('Maximale Stunden (1-24)')
-                    .setRequired(true)
-                    .setMinValue(1)
-                    .setMaxValue(24)
-            )
-    )
-    .addSubcommand(subcommand =>
-        subcommand
-            .setName('retention')
-            .setDescription('Setze die Anzahl der Tage, die Aufnahmen aufbewahrt werden')
-            .addIntegerOption(option =>
-                option
-                    .setName('days')
-                    .setDescription('Anzahl der Tage (1-30)')
-                    .setRequired(true)
-                    .setMinValue(1)
-                    .setMaxValue(30)
-            )
-    )
-    .addSubcommand(subcommand =>
-        subcommand
-            .setName('autojoin')
-            .setDescription('Aktiviere/Deaktiviere automatisches Joinen')
-            .addBooleanOption(option =>
-                option
-                    .setName('enabled')
-                    .setDescription('Aktiviert oder deaktiviert')
-                    .setRequired(true)
-            )
-    )
-    .addSubcommand(subcommand =>
-        subcommand
-            .setName('show')
-            .setDescription('Zeige die aktuellen Einstellungen')
-    );
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator);
 
 export async function execute(interaction: ChatInputCommandInteraction) {
-    if (!interaction.guildId) {
-        await interaction.reply({ content: 'Dieser Befehl kann nur auf einem Server verwendet werden!', ephemeral: true });
+    const guildId = interaction.guildId;
+    if (!guildId) {
+        await interaction.reply({ content: 'This command can only be used in a server!', ephemeral: true });
         return;
     }
 
     const subcommand = interaction.options.getSubcommand();
 
-    try {
-        switch (subcommand) {
-            case 'channel': {
-                const channel = interaction.options.getChannel('channel', true);
-                await settings.setTargetChannel(interaction.guildId, channel.id);
-                await interaction.reply({ content: `Voice-Channel für Aufnahmen wurde auf ${channel.name} gesetzt.`, ephemeral: true });
-                break;
-            }
+    if (subcommand === 'recording') {
+        const format = interaction.options.getString('format');
+        const bitrate = interaction.options.getInteger('bitrate');
+        const noiseSuppression = interaction.options.getBoolean('noise_suppression');
 
-            case 'maxlength': {
-                const hours = interaction.options.getInteger('hours', true);
-                await settings.setMaxRecordingLength(interaction.guildId, hours);
-                await interaction.reply({ content: `Maximale Aufnahmedauer wurde auf ${hours} Stunden gesetzt.`, ephemeral: true });
-                break;
-            }
+        const currentSettings = configManager.getRecordingSettings(guildId) || {};
+        const newSettings = {
+            ...currentSettings,
+            ...(format && { format: format as 'wav' | 'ogg' | 'mp3' }),
+            ...(bitrate && { bitrate }),
+            ...(noiseSuppression !== null && { noiseSuppression })
+        };
 
-            case 'retention': {
-                const days = interaction.options.getInteger('days', true);
-                await settings.setRetentionDays(interaction.guildId, days);
-                await interaction.reply({ content: `Aufbewahrungsdauer wurde auf ${days} Tage gesetzt.`, ephemeral: true });
-                break;
-            }
+        configManager.setRecordingSettings(guildId, newSettings);
 
-            case 'autojoin': {
-                const enabled = interaction.options.getBoolean('enabled', true);
-                await settings.setAutoJoinEnabled(interaction.guildId, enabled);
-                await interaction.reply({ 
-                    content: `Automatisches Joinen wurde ${enabled ? 'aktiviert' : 'deaktiviert'}.`, 
-                    ephemeral: true 
-                });
-                break;
-            }
+        const embed = new EmbedBuilder()
+            .setColor('#00ff00')
+            .setTitle('Recording Settings Updated')
+            .addFields(
+                { name: 'Format', value: newSettings.format || 'Default', inline: true },
+                { name: 'Bitrate', value: `${newSettings.bitrate || 'Default'} kbps`, inline: true },
+                { name: 'Noise Suppression', value: newSettings.noiseSuppression ? 'Enabled' : 'Disabled', inline: true }
+            );
 
-            case 'show': {
-                const guildSettings = await settings.getGuildSettings(interaction.guildId);
-                const channel = interaction.guild?.channels.cache.get(guildSettings.target_voice_channel);
-                
-                const settingsEmbed = {
-                    color: 0x0099FF,
-                    title: 'Bot Einstellungen',
-                    fields: [
-                        {
-                            name: 'Voice-Channel',
-                            value: channel ? channel.name : 'Nicht gesetzt',
-                            inline: true
-                        },
-                        {
-                            name: 'Max. Aufnahmedauer',
-                            value: `${guildSettings.max_recording_length / (60 * 60 * 1000)} Stunden`,
-                            inline: true
-                        },
-                        {
-                            name: 'Aufbewahrungsdauer',
-                            value: `${guildSettings.recording_retention_days} Tage`,
-                            inline: true
-                        },
-                        {
-                            name: 'Auto-Join',
-                            value: guildSettings.auto_join_enabled ? 'Aktiviert' : 'Deaktiviert',
-                            inline: true
-                        }
-                    ],
-                    timestamp: new Date().toISOString()
-                };
+        await interaction.reply({ embeds: [embed] });
+    } else if (subcommand === 'logs') {
+        const channel = interaction.options.getChannel('channel', true);
+        
+        configManager.setLogChannelId(guildId, channel.id);
 
-                await interaction.reply({ embeds: [settingsEmbed], ephemeral: true });
-                break;
-            }
-        }
-    } catch (error) {
-        console.error('Error in settings command:', error);
-        await interaction.reply({ 
-            content: 'Es ist ein Fehler aufgetreten. Bitte versuche es später erneut.', 
-            ephemeral: true 
-        });
+        const embed = new EmbedBuilder()
+            .setColor('#00ff00')
+            .setTitle('Log Channel Updated')
+            .setDescription(`Logs will now be sent to ${channel}`);
+
+        await interaction.reply({ embeds: [embed] });
     }
 }

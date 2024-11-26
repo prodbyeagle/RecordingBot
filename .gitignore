@@ -3,3 +3,4 @@ recordings/
 dist/
 package-lock.json
 .env
+config/

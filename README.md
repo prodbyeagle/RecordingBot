@@ -39,7 +39,7 @@ npm install
 3. Configure environment variables
 Create a `.env` file with the following variables:
 ```env
-DISCORD_TOKEN=your_discord_bot_token
+TOKEN=your_discord_bot_token
 SUPABASE_URL=your_supabase_url
 SUPABASE_KEY=your_supabase_key
 RECORDINGS_PATH=./recordings

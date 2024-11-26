@@ -1,147 +1,208 @@
-import { 
-    ChatInputCommandInteraction, 
-    SlashCommandBuilder, 
-    PermissionFlagsBits,
-    User
-} from 'discord.js';
-import { db } from '../utils/supabase';
-import { settings } from '../utils/settings';
-import { Command } from './index';
+import { ChatInputCommandInteraction, SlashCommandBuilder, PermissionFlagsBits, ChannelType, EmbedBuilder } from 'discord.js';
+import { AutojoinService } from '../services/AutojoinService';
 
-/** Response messages for autojoin operations */
-const MESSAGES = {
-    GUILD_ONLY: 'Dieser Befehl kann nur auf einem Server verwendet werden!',
-    USER_ADDED: (user: User) => `${user.tag} wurde zur Auto-Join Liste hinzugefügt.`,
-    USER_REMOVED: (user: User) => `${user.tag} wurde von der Auto-Join Liste entfernt.`,
-    USER_NOT_FOUND: (user: User) => `${user.tag} ist nicht in der Auto-Join Liste.`,
-    ERROR: 'Ein Fehler ist aufgetreten. Bitte versuche es später erneut.',
-    NO_USERS: 'Keine Auto-Join User konfiguriert.',
-    USER_LIST: 'Auto-Join User:'
-} as const;
+let autojoinService: AutojoinService;
 
-/** Command builder for autojoin functionality */
+export function initializeCommand(service: AutojoinService) {
+    autojoinService = service;
+}
+
 export const data = new SlashCommandBuilder()
     .setName('autojoin')
-    .setDescription('Verwalte Auto-Join User')
+    .setDescription('Configure auto-join settings')
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
     .addSubcommand(subcommand =>
         subcommand
-            .setName('add')
-            .setDescription('Füge einen User zur Auto-Join Liste hinzu')
-            .addUserOption(option =>
+            .setName('set')
+            .setDescription('Set a voice channel for auto-joining')
+            .addChannelOption(option =>
                 option
-                    .setName('user')
-                    .setDescription('Der User, der hinzugefügt werden soll')
+                    .setName('channel')
+                    .setDescription('The voice channel to auto-join')
+                    .addChannelTypes(ChannelType.GuildVoice)
                     .setRequired(true)
             )
     )
     .addSubcommand(subcommand =>
         subcommand
-            .setName('remove')
-            .setDescription('Entferne einen User von der Auto-Join Liste')
+            .setName('adduser')
+            .setDescription('Add a user who can trigger the bot to join')
             .addUserOption(option =>
                 option
                     .setName('user')
-                    .setDescription('Der User, der entfernt werden soll')
+                    .setDescription('The user to add')
+                    .setRequired(true)
+            )
+    )
+    .addSubcommand(subcommand =>
+        subcommand
+            .setName('removeuser')
+            .setDescription('Remove a user from the trigger list')
+            .addUserOption(option =>
+                option
+                    .setName('user')
+                    .setDescription('The user to remove')
                     .setRequired(true)
             )
     )
     .addSubcommand(subcommand =>
         subcommand
             .setName('list')
-            .setDescription('Zeige alle Auto-Join User')
+            .setDescription('List all configured users for auto-join')
+    )
+    .addSubcommand(subcommand =>
+        subcommand
+            .setName('disable')
+            .setDescription('Disable auto-join for this server')
     );
 
-/**
- * Handles the autojoin command execution
- * @param interaction - The command interaction
- */
-export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
-    if (!interaction.guildId) {
-        await interaction.reply({ content: MESSAGES.GUILD_ONLY, ephemeral: true });
-        return;
-    }
-
+export async function execute(interaction: ChatInputCommandInteraction) {
     const subcommand = interaction.options.getSubcommand();
-    await interaction.deferReply({ ephemeral: true });
-
-    try {
-        switch (subcommand) {
-            case 'add':
-                await handleAddUser(interaction);
-                break;
-            case 'remove':
-                await handleRemoveUser(interaction);
-                break;
-            case 'list':
-                await handleListUsers(interaction);
-                break;
-        }
-    } catch (error) {
-        console.error('Error in autojoin command:', error);
-        await interaction.editReply({ content: MESSAGES.ERROR });
-    }
-}
-
-/**
- * Handles adding a user to the auto-join list
- * @param interaction - The command interaction
- */
-async function handleAddUser(interaction: ChatInputCommandInteraction): Promise<void> {
-    const user = interaction.options.getUser('user', true);
     const guildId = interaction.guildId!;
-    
-    await db.addAutoJoinUser({
-        user_id: user.id,
-        guild_id: guildId
-    });
-    
-    await interaction.editReply({ content: MESSAGES.USER_ADDED(user) });
-}
 
-/**
- * Handles removing a user from the auto-join list
- * @param interaction - The command interaction
- */
-async function handleRemoveUser(interaction: ChatInputCommandInteraction): Promise<void> {
-    const user = interaction.options.getUser('user', true);
-    const guildId = interaction.guildId!;
-    
-    const isAutoJoinUser = await db.isAutoJoinUser(user.id, guildId);
-    if (!isAutoJoinUser) {
-        await interaction.editReply({ content: MESSAGES.USER_NOT_FOUND(user) });
-        return;
-    }
-    
-    await db.removeAutoJoinUser(user.id, guildId);
-    await interaction.editReply({ content: MESSAGES.USER_REMOVED(user) });
-}
-
-/**
- * Handles listing all auto-join users
- * @param interaction - The command interaction
- */
-async function handleListUsers(interaction: ChatInputCommandInteraction): Promise<void> {
-    const guildId = interaction.guildId!;
-    const autoJoinUsers = await db.getAutoJoinUsers(guildId);
-    
-    if (autoJoinUsers.length === 0) {
-        await interaction.editReply({ content: MESSAGES.NO_USERS });
-        return;
-    }
-    
-    const userList = await Promise.all(
-        autoJoinUsers.map(async (dbUser) => {
-            try {
-                const user = await interaction.client.users.fetch(dbUser.user_id);
-                return `- ${user.tag}`;
-            } catch {
-                return `- Unbekannter User (${dbUser.user_id})`;
+    switch (subcommand) {
+        case 'set': {
+            const channel = interaction.options.getChannel('channel');
+            if (!channel) {
+                const embed = new EmbedBuilder()
+                    .setColor('#ff0000')
+                    .setTitle('❌ Error')
+                    .setDescription('Please select a valid voice channel!')
+                    .setTimestamp();
+                await interaction.reply({ embeds: [embed], ephemeral: true });
+                return;
             }
-        })
-    );
-    
-    await interaction.editReply({
-        content: `${MESSAGES.USER_LIST}\n${userList.join('\n')}`
-    });
+
+            autojoinService.setChannel(guildId, channel.id);
+            const embed = new EmbedBuilder()
+                .setColor('#00ff00')
+                .setTitle('✅ Auto-Join Channel Set')
+                .setDescription(`Channel has been set to ${channel.name}!`)
+                .addFields({ 
+                    name: 'Next Steps', 
+                    value: 'Use `/autojoin adduser` to configure which users can trigger the bot.' 
+                })
+                .setTimestamp();
+            await interaction.reply({ embeds: [embed], ephemeral: true });
+            break;
+        }
+
+        case 'adduser': {
+            const user = interaction.options.getUser('user');
+            if (!user) {
+                const embed = new EmbedBuilder()
+                    .setColor('#ff0000')
+                    .setTitle('❌ Error')
+                    .setDescription('Please select a valid user!')
+                    .setTimestamp();
+                await interaction.reply({ embeds: [embed], ephemeral: true });
+                return;
+            }
+
+            if (autojoinService.addTriggerUser(guildId, user.id)) {
+                const embed = new EmbedBuilder()
+                    .setColor('#00ff00')
+                    .setTitle('✅ User Added')
+                    .setDescription(`Added ${user.username} to the auto-join trigger list.`)
+                    .setTimestamp();
+                await interaction.reply({ embeds: [embed], ephemeral: true });
+            } else {
+                const embed = new EmbedBuilder()
+                    .setColor('#ff0000')
+                    .setTitle('❌ Error')
+                    .setDescription('Please set up an auto-join channel first using `/autojoin set`!')
+                    .setTimestamp();
+                await interaction.reply({ embeds: [embed], ephemeral: true });
+            }
+            break;
+        }
+
+        case 'removeuser': {
+            const user = interaction.options.getUser('user');
+            if (!user) {
+                const embed = new EmbedBuilder()
+                    .setColor('#ff0000')
+                    .setTitle('❌ Error')
+                    .setDescription('Please select a valid user!')
+                    .setTimestamp();
+                await interaction.reply({ embeds: [embed], ephemeral: true });
+                return;
+            }
+
+            if (autojoinService.removeTriggerUser(guildId, user.id)) {
+                const embed = new EmbedBuilder()
+                    .setColor('#00ff00')
+                    .setTitle('✅ User Removed')
+                    .setDescription(`Removed ${user.username} from the auto-join trigger list.`)
+                    .setTimestamp();
+                await interaction.reply({ embeds: [embed], ephemeral: true });
+            } else {
+                const embed = new EmbedBuilder()
+                    .setColor('#ff0000')
+                    .setTitle('❌ Error')
+                    .setDescription(`${user.username} was not in the auto-join trigger list or no channel is configured.`)
+                    .setTimestamp();
+                await interaction.reply({ embeds: [embed], ephemeral: true });
+            }
+            break;
+        }
+
+        case 'list': {
+            const config = autojoinService.getConfig(guildId);
+            if (!config?.channelId) {
+                const embed = new EmbedBuilder()
+                    .setColor('#ff0000')
+                    .setTitle('❌ Error')
+                    .setDescription('No auto-join channel is configured!')
+                    .setTimestamp();
+                await interaction.reply({ embeds: [embed], ephemeral: true });
+                return;
+            }
+
+            const channel = await interaction.guild?.channels.fetch(config.channelId);
+            const userList = await Promise.all(
+                Array.from(config.triggerUsers).map(async userId => {
+                    const user = await interaction.guild?.members.fetch(userId);
+                    return {
+                        username: user?.user.username || 'Unknown User',
+                        id: userId
+                    };
+                })
+            );
+
+            const embed = new EmbedBuilder()
+                .setColor('#0099ff')
+                .setTitle('🎙️ Auto-Join Configuration')
+                .addFields(
+                    { name: 'Channel', value: channel ? `<#${channel.id}>` : 'Unknown Channel' },
+                    { 
+                        name: 'Trigger Users', 
+                        value: userList.length === 0 ? 'None' : userList.map(user => `• <@${user.id}>`).join('\n')
+                    }
+                )
+                .setTimestamp();
+
+            await interaction.reply({ embeds: [embed], ephemeral: true });
+            break;
+        }
+
+        case 'disable': {
+            if (autojoinService.disable(guildId)) {
+                const embed = new EmbedBuilder()
+                    .setColor('#00ff00')
+                    .setTitle('✅ Auto-Join Disabled')
+                    .setDescription('Auto-join has been disabled for this server.')
+                    .setTimestamp();
+                await interaction.reply({ embeds: [embed], ephemeral: true });
+            } else {
+                const embed = new EmbedBuilder()
+                    .setColor('#ff0000')
+                    .setTitle('❌ Error')
+                    .setDescription('Auto-join was not configured for this server.')
+                    .setTimestamp();
+                await interaction.reply({ embeds: [embed], ephemeral: true });
+            }
+            break;
+        }
+    }
 }
