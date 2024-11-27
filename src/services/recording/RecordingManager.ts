@@ -1,26 +1,29 @@
 import { VoiceBasedChannel, VoiceChannel, User } from 'discord.js';
 import { RecordingSession } from './RecordingSession';
-import { RecordingOptions, RecordingMetadata, RecordingEventHandler, AudioFormat, AudioProcessorOptions } from './types';
+import { RecordingOptions, RecordingMetadata, RecordingEventHandler, AudioFormat, AudioProcessorOptions, RecordingEvent, RecordingEventData } from './types';
 import { configManager } from '../../utils/configManager';
 import { existsSync, mkdirSync } from 'fs';
 import { AudioProcessorFactory } from './audio/AudioProcessorFactory';
+import { Logger } from '../Logger';
+import { createRecordingEventLogger } from './RecordingEventLogger';
 
 export class RecordingManager {
     private sessions: Map<string, RecordingSession>;
     private globalEventHandlers: Set<RecordingEventHandler>;
     private defaultOptions: RecordingOptions;
     private readonly audioProcessorFactory: AudioProcessorFactory;
+    private eventLogger?: RecordingEventHandler;
 
     constructor() {
         this.sessions = new Map();
         this.globalEventHandlers = new Set();
         this.audioProcessorFactory = new AudioProcessorFactory();
-        
+
         this.defaultOptions = {
             format: 'wav' as AudioFormat,
             sampleRate: 48000,
             channels: 2,
-            bitrate: 128000, 
+            bitrate: 128000,
             noiseSuppression: true,
             echoCancellation: true,
             silenceThreshold: -50,
@@ -40,8 +43,8 @@ export class RecordingManager {
         if (guildId) {
             const settings = configManager.getRecordingSettings(guildId);
             if (settings) {
-                const format = settings.format && ['wav', 'mp3'].includes(settings.format) 
-                    ? settings.format as AudioFormat 
+                const format = settings.format && ['wav', 'mp3'].includes(settings.format)
+                    ? settings.format as AudioFormat
                     : 'wav' as AudioFormat;
 
                 const bitrate = settings.bitrate ? settings.bitrate * 1000 : this.defaultOptions.bitrate;
@@ -50,7 +53,7 @@ export class RecordingManager {
                     ...this.defaultOptions,
                     ...settings,
                     format,
-                    bitrate 
+                    bitrate
                 };
             }
         }
@@ -62,7 +65,7 @@ export class RecordingManager {
             throw new Error('Unsupported format. Only wav and mp3 are supported.');
         }
 
-        const bitrate = typeof options.bitrate === 'number' 
+        const bitrate = typeof options.bitrate === 'number'
             ? (options.bitrate < 1000 ? options.bitrate * 1000 : options.bitrate)
             : 128000;
 
@@ -92,63 +95,42 @@ export class RecordingManager {
         });
     }
 
+    public setLogger(logger: Logger): void {
+        this.eventLogger = createRecordingEventLogger(logger);
+        this.globalEventHandlers.add(this.eventLogger);
+    }
+
     public async startRecording(
-        channel: VoiceBasedChannel,
+        channel: VoiceChannel,
         initiator: User,
-        options?: Partial<RecordingOptions>
+        options: Partial<RecordingOptions> = {}
     ): Promise<RecordingSession> {
         if (!(channel instanceof VoiceChannel)) {
             throw new Error('Recording is only supported in regular voice channels, not stage channels.');
         }
 
         console.log(`[RecordingManager] Starting recording in channel ${channel.name}`);
-        
-        const guildSettings = configManager.getRecordingSettings(channel.guild.id);
-        const guildFormat = guildSettings?.format && ['wav', 'mp3'].includes(guildSettings.format)
-            ? guildSettings.format as AudioFormat
-            : this.defaultOptions.format;
 
-        if (guildSettings?.bitrate && guildSettings.bitrate < 1000) {
-            guildSettings.bitrate *= 1000;
-        }
+        const mergedOptions = { ...this.defaultOptions, ...options };
+        const session = new RecordingSession(channel, initiator, mergedOptions, this.audioProcessorFactory);
 
-        const baseOptions: RecordingOptions = {
-            ...this.defaultOptions,
-            ...guildSettings,
-            format: guildFormat
-        };
-
-        const format: AudioFormat = (options?.format && ['wav', 'mp3'].includes(options.format)) 
-            ? options.format as AudioFormat 
-            : baseOptions.format;
-
-        if (options?.bitrate && options.bitrate < 1000) {
-            options.bitrate *= 1000;
-        }
-
-        const mergedOptions: RecordingOptions = {
-            ...baseOptions,
-            ...(options || {}),
-            format
-        };
-
-        console.log(`[RecordingManager] Using options:`, mergedOptions);
-
-        const session = new RecordingSession(
-            channel as VoiceChannel,
-            initiator,
-            mergedOptions,
-            this.audioProcessorFactory
-        );
-        
-        this.sessions.set(session.getMetadata().sessionId, session);
-
+        // Add global event handlers
         this.globalEventHandlers.forEach(handler => {
-            session.addListener('recordingEvent', handler);
+            session.on('recordingEvent', (event: RecordingEvent, eventData?: RecordingEventData) => {
+                const metadata = session.getMetadata();
+                handler(event, {
+                    ...eventData,
+                    metadata,
+                    channel,
+                    user: initiator,
+                    userId: initiator.id
+                });
+            });
         });
 
-        console.log(`[RecordingManager] Starting session ${session.getMetadata().sessionId}`);
         await session.start();
+        this.sessions.set(session.getMetadata().sessionId, session);
+
         return session;
     }
 

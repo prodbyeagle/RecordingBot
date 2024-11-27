@@ -82,7 +82,7 @@ export class AutojoinService {
             if (newState.channel && config.triggerUsers.has(newState.member?.id || '') && 
                 (!oldState.channel || oldState.channel.id !== newState.channel.id)) {
                 
-                this.logger.log(`[AutojoinService] Trigger user ${newState.member?.user.tag} joined channel ${newState.channel.name}`);
+                this.logger.debug(`[AutojoinService] Trigger user ${newState.member?.user.tag} joined channel ${newState.channel.name}`);
                 
                 // Start new recording if not already recording
                 if (!config.currentSession || !config.currentSession.isActive()) {
@@ -91,7 +91,7 @@ export class AutojoinService {
                             newState.channel,
                             newState.member!.user
                         );
-                        this.logger.log(`[AutojoinService] Started recording in channel ${newState.channel.name}`);
+                        this.logger.debug(`[AutojoinService] Started recording in channel ${newState.channel.name}`);
                     }
                 }
                 return;

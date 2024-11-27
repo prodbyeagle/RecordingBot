@@ -13,13 +13,14 @@ console.log('Environment loaded:', {
     clientIdExists: !!process.env.CLIENT_ID,
 });
 
-import { Client, GatewayIntentBits, Events, TextChannel, VoiceState, Collection, REST, Routes } from 'discord.js';
+import { Client, GatewayIntentBits, Events, TextChannel, VoiceState, Collection, REST, Routes, ChannelType } from 'discord.js';
 import { RecordingManager } from './services/recording';
 import { Logger } from './services/Logger';
 import { botConfig } from './config';
 import { AutojoinService } from './services/AutojoinService';
 import { configManager } from './utils/configManager';
 import * as settingsCommand from './commands/settings';
+import * as recordingCommand from './commands/recording';
 import * as autojoinCommand from './commands/autojoin';
 
 interface Command {
@@ -43,39 +44,39 @@ let autojoinService: AutojoinService;
 client.once(Events.ClientReady, async () => {
     console.log(`Logged in as ${client.user?.tag}`);
 
+    // Initialize services and logger
+    logger = new Logger();
+    const recordingManager = new RecordingManager();
+    recordingCommand.initializeCommand(recordingManager);
+
     // Initialize logger with audit log channel if configured
     const guildId = (await client.guilds.fetch()).first()?.id;
     if (guildId) {
         const logChannelId = configManager.getLogChannelId(guildId);
         if (logChannelId) {
-            const channel = await client.channels.fetch(logChannelId) as TextChannel;
-            logger = new Logger(channel);
-        } else {
-            // Create a temporary logger that just console.logs until audit channel is set
-            logger = new Logger({
-                send: async (content: any) => {
-                    console.log('[Audit Log]', content);
-                    return null as any;
+            try {
+                const channel = await client.channels.fetch(logChannelId);
+                if (channel?.isTextBased() && channel.type === ChannelType.GuildText) {
+                    logger = new Logger(channel);
+                    recordingManager.setLogger(logger);
+                    logger.info('Logger initialized with audit log channel');
+                } else {
+                    logger = new Logger();
+                    console.log('Log channel must be a regular text channel');
                 }
-            } as any);
-        }
-    } else {
-        // Fallback logger if no guild is available
-        logger = new Logger({
-            send: async (content: any) => {
-                console.log('[Audit Log]', content);
-                return null as any;
+            } catch (error) {
+                console.error('Failed to initialize logger with audit channel:', error);
+                logger = new Logger();
             }
-        } as any);
+        }
     }
 
-    // Initialize services
-    const recordingManager = new RecordingManager();
     autojoinService = new AutojoinService(client, recordingManager, logger);
     autojoinCommand.initializeCommand(autojoinService);
 
     // Register commands
     commands.set(settingsCommand.data.name, settingsCommand);
+    commands.set(recordingCommand.data.name, recordingCommand);
     commands.set(autojoinCommand.data.name, autojoinCommand);
 
     // Get the first guild the bot is in
@@ -94,7 +95,7 @@ client.once(Events.ClientReady, async () => {
         // First, delete all existing commands
         console.log('Clearing existing commands...');
         await rest.put(
-            Routes.applicationGuildCommands(botConfig.clientId, firstGuild.id),
+            Routes.applicationCommands(botConfig.clientId),
             { body: [] }
         );
         console.log('Successfully cleared all existing commands.');
@@ -131,7 +132,11 @@ client.on(Events.InteractionCreate, async interaction => {
 });
 
 client.on(Events.VoiceStateUpdate, async (oldState: VoiceState, newState: VoiceState) => {
-    await autojoinService?.handleVoiceStateUpdate(oldState, newState);
+    try {
+        await autojoinService.handleVoiceStateUpdate(oldState, newState);
+    } catch (error) {
+        console.error('Error handling voice state update:', error);
+    }
 });
 
 // Debug: Log token (length only for security)

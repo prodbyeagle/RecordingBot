@@ -37,6 +37,7 @@ export interface RecordingMetadata {
     options: RecordingOptions;
     participants: string[];
     initiator: string;
+    outputPath?: string;  // Path to the final recording file
 }
 
 export interface RecordingStats {
@@ -62,6 +63,8 @@ export interface RecordingEventData {
     error?: Error;
     metadata?: RecordingMetadata;
     stats?: RecordingStats;
+    channel?: VoiceChannel;
+    user?: User;
 }
 
 export type RecordingEventHandler = (event: RecordingEvent, data?: RecordingEventData) => Promise<void>;

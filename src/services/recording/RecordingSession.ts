@@ -27,6 +27,7 @@ import { spawn } from 'child_process';
 import { promisify } from 'util';
 import { unlink } from 'fs/promises';
 import prism from 'prism-media';
+import { ulid } from 'ulid';
 
 class AudioBuffer extends Transform {
     private buffer: Buffer[] = [];
@@ -150,7 +151,7 @@ export class RecordingSession extends EventEmitter {
     }
 
     private generateSessionId(): string {
-        return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        return `${ulid()}`;
     }
 
     private async convertToFormat(inputPath: string, outputPath: string): Promise<void> {
@@ -223,6 +224,8 @@ export class RecordingSession extends EventEmitter {
                 if (newState.status === VoiceConnectionStatus.Ready) {
                     this.voiceReceiver = this.voiceConnection?.receiver;
                     await this.setupRecording();
+                    // Emit start event when everything is ready
+                    this.emit('recordingEvent', 'start');
                 }
             });
 
@@ -360,7 +363,6 @@ export class RecordingSession extends EventEmitter {
                 throw new Error('Voice connection not ready');
             }
 
-            this.emit('recordingEvent', 'start');
             console.log(`[RecordingSession] Recording started, saving PCM to: ${this.tempPCMFile}`);
 
         } catch (error) {
@@ -392,6 +394,7 @@ export class RecordingSession extends EventEmitter {
                 this.options.storageDir || './recordings',
                 `${this.metadata.sessionId}.${this.outputFormat}`
             );
+            this.metadata.outputPath = finalPath; // Set the output path
 
             console.log(`[RecordingSession] Converting PCM to ${this.outputFormat}...`);
             await this.convertToFormat(this.tempPCMFile, finalPath);
