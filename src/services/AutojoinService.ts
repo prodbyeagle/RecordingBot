@@ -1,5 +1,4 @@
-import { VoiceState, VoiceChannel } from 'discord.js';
-import { VoiceConnection, joinVoiceChannel, getVoiceConnection, DiscordGatewayAdapterCreator, entersState, VoiceConnectionStatus } from '@discordjs/voice';
+import { VoiceState, VoiceChannel, Client, GuildMember, VoiceBasedChannel, StageChannel } from 'discord.js';
 import { RecordingManager } from './recording/RecordingManager';
 import { Logger } from './Logger';
 import { configManager } from '../utils/configManager';
@@ -15,8 +14,10 @@ export class AutojoinService {
     private recordingManager: RecordingManager;
     private logger: Logger;
     private configs: Map<string, AutoJoinConfig> = new Map();
+    private client: Client;
 
-    constructor(recordingManager: RecordingManager, logger: Logger) {
+    constructor(client: Client, recordingManager: RecordingManager, logger: Logger) {
+        this.client = client;
         this.recordingManager = recordingManager;
         this.logger = logger;
     }
@@ -70,139 +71,99 @@ export class AutojoinService {
     }
 
     public async handleVoiceStateUpdate(oldState: VoiceState, newState: VoiceState): Promise<void> {
-        const guildId = newState.guild.id;
-        const config = this.getConfig(guildId);
-        if (!config) return;
-
-        // Log for debugging
-        console.log('Voice state update:', {
-            oldChannel: oldState.channelId,
-            newChannel: newState.channelId,
-            userId: newState.member?.id,
-            configChannel: config.channelId,
-            isTriggerUser: newState.member ? config.triggerUsers.has(newState.member.id) : false
-        });
-
-        // Handle user joining a channel
-        if (newState.channelId === config.channelId && newState.member) {
-            if (config.triggerUsers.has(newState.member.id) && !config.currentSession?.isActive()) {
-                console.log('Starting recording - trigger user joined target channel');
-                await this.startRecording(newState, config);
-            }
-        }
-
-        // Handle channel becoming empty or trigger user leaving
-        if (oldState.channelId === config.channelId) {
-            const oldChannel = oldState.channel;
-            if (!oldChannel) return;
-
-            const remainingMembers = oldChannel.members.size;
-            const hasTriggerUser = oldChannel.members.some(m => config.triggerUsers.has(m.id));
-
-            console.log('Channel state:', {
-                remainingMembers,
-                hasTriggerUser,
-                isCurrentUserTrigger: oldState.member ? config.triggerUsers.has(oldState.member.id) : false
-            });
-
-            const shouldStop =
-                remainingMembers <= 1 || // Channel is empty (only bot remains)
-                (!hasTriggerUser && config.currentSession?.isActive()); // No trigger users left
-
-            if (shouldStop) {
-                console.log('Stopping recording - channel empty or no trigger users');
-                await this.stopRecording(oldState, config);
-            }
-        }
-    }
-
-    private async startRecording(state: VoiceState, config: AutoJoinConfig): Promise<void> {
-        if (!state.channel || !state.member || config.currentSession?.isActive()) return;
-
         try {
-            console.log('Attempting to start recording in channel:', state.channel.name);
+            const guildId = newState.guild.id;
+            const config = this.getConfig(guildId);
+            
+            // If no config exists for this guild, ignore
+            if (!config) return;
 
-            // Join voice channel
-            const connection = joinVoiceChannel({
-                channelId: state.channel.id,
-                guildId: state.guild.id,
-                adapterCreator: state.guild.voiceAdapterCreator as DiscordGatewayAdapterCreator,
-                selfDeaf: false
-            });
-
-            // Wait for connection to be ready
-            await entersState(connection, VoiceConnectionStatus.Ready, 30_000);
-            console.log('Voice connection ready');
-
-            // Start recording session
-            const session = await this.recordingManager.startRecording(
-                state.channel as VoiceChannel,
-                state.member.user,
-                {
-                    format: 'wav',
-                    separateUsers: true,
-                    noiseSuppression: true
+            // Check if this is a trigger user joining a channel
+            if (newState.channel && config.triggerUsers.has(newState.member?.id || '') && 
+                (!oldState.channel || oldState.channel.id !== newState.channel.id)) {
+                
+                this.logger.log(`[AutojoinService] Trigger user ${newState.member?.user.tag} joined channel ${newState.channel.name}`);
+                
+                // Start new recording if not already recording
+                if (!config.currentSession || !config.currentSession.isActive()) {
+                    if (newState.channel instanceof VoiceChannel) {
+                        config.currentSession = await this.recordingManager.startRecording(
+                            newState.channel,
+                            newState.member!.user
+                        );
+                        this.logger.log(`[AutojoinService] Started recording in channel ${newState.channel.name}`);
+                    }
                 }
-            );
+                return;
+            }
 
-            config.currentSession = session;
-            console.log('Recording session started:', session.getMetadata().id);
+            // Handle existing recording sessions
+            const session = this.findSessionForMember(oldState.member || newState.member);
+            if (!session) return;
 
-            // Log event
-            this.logger.logEvent(session.getMetadata().id, {
-                type: 'START',
-                timestamp: new Date(),
-                user: state.member.user
-            });
+            const metadata = session.getMetadata();
+            
+            // Check if the bot should leave
+            if (this.shouldLeaveChannel(newState.channel)) {
+                this.logger.log(`[AutojoinService] No active users in channel ${metadata.channelId}, stopping recording`);
+                await session.stop();
+                if (config.currentSession === session) {
+                    config.currentSession = undefined;
+                }
+                return;
+            }
 
+            // Check if recording should follow users
+            if (this.shouldFollowUser(oldState, newState)) {
+                const newChannel = newState.channel;
+                if (!newChannel || !(newChannel instanceof VoiceChannel)) return;
+
+                this.logger.log(`[AutojoinService] Following user to new channel ${newChannel.name}`);
+                await session.stop();
+                config.currentSession = await this.recordingManager.startRecording(
+                    newChannel,
+                    await this.client.users.fetch(metadata.initiator),
+                    metadata.options
+                );
+            }
         } catch (error) {
-            console.error('Failed to start recording:', error);
-            // Log join failure
-            this.logger.logEvent('session-error', {
-                type: 'LEAVE',
-                timestamp: new Date(),
-                user: state.member.user
-            });
-            throw error;
+            this.logger.error('[AutojoinService] Error handling voice state update:', error);
         }
     }
 
-    private async stopRecording(state: VoiceState, config: AutoJoinConfig): Promise<void> {
-        if (!config.currentSession || !state.member) return;
+    private findSessionForMember(member: GuildMember | null): RecordingSession | undefined {
+        if (!member) return undefined;
 
-        try {
-            console.log('Attempting to stop recording session:', config.currentSession.getMetadata().id);
-
-            // Only stop if the session is active
-            if (config.currentSession.isActive()) {
-                await config.currentSession.stop();
-                console.log('Recording session stopped');
-
-                // Log event
-                this.logger.logEvent(config.currentSession.getMetadata().id, {
-                    type: 'STOP',
-                    timestamp: new Date(),
-                    user: state.member.user
-                });
+        for (const [sessionId, session] of this.recordingManager.getActiveSessions()) {
+            const metadata = session.getMetadata();
+            if (metadata.guildId === member.guild.id && session.isActive()) {
+                return session;
             }
-        } catch (error) {
-            console.error('Failed to stop recording:', error);
-            // Log error as LEAVE event
-            this.logger.logEvent('session-error', {
-                type: 'LEAVE',
-                timestamp: new Date(),
-                user: state.member.user
-            });
-        } finally {
-            // Destroy voice connection
-            const connection = getVoiceConnection(state.guild.id);
-            if (connection) {
-                console.log('Destroying voice connection');
-                connection.destroy();
-            }
-
-            // Clear the session reference
-            config.currentSession = undefined;
         }
+        return undefined;
+    }
+
+    private shouldLeaveChannel(channel: VoiceBasedChannel | null): boolean {
+        if (!channel) return true;
+        
+        // Count non-bot members in the channel
+        const nonBotMembers = channel.members.filter(member => !member.user.bot).size;
+        return nonBotMembers === 0;
+    }
+
+    private shouldFollowUser(oldState: VoiceState, newState: VoiceState): boolean {
+        // Don't follow if user disconnected or if it's a stage channel
+        if (!newState.channel || newState.channel instanceof StageChannel) return false;
+
+        // Don't follow bots
+        if (newState.member?.user.bot) return false;
+
+        // Only follow if user was in a channel we were recording
+        const oldSession = this.findSessionForMember(oldState.member);
+        if (!oldSession || !oldSession.isActive()) return false;
+
+        // Make sure we're not already in the new channel
+        const newSession = this.findSessionForMember(newState.member);
+        return !newSession;
     }
 }

@@ -16,7 +16,7 @@ console.log('Environment loaded:', {
 import { Client, GatewayIntentBits, Events, TextChannel, VoiceState, Collection, REST, Routes } from 'discord.js';
 import { RecordingManager } from './services/recording';
 import { Logger } from './services/Logger';
-import { defaultConfig, botConfig } from './config';
+import { botConfig } from './config';
 import { AutojoinService } from './services/AutojoinService';
 import { configManager } from './utils/configManager';
 import * as settingsCommand from './commands/settings';
@@ -71,7 +71,7 @@ client.once(Events.ClientReady, async () => {
 
     // Initialize services
     const recordingManager = new RecordingManager();
-    autojoinService = new AutojoinService(recordingManager, logger);
+    autojoinService = new AutojoinService(client, recordingManager, logger);
     autojoinCommand.initializeCommand(autojoinService);
 
     // Register commands

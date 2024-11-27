@@ -14,14 +14,13 @@ export const data = new SlashCommandBuilder()
                     .setDescription('Recording format')
                     .addChoices(
                         { name: 'WAV', value: 'wav' },
-                        { name: 'OGG', value: 'ogg' },
                         { name: 'MP3', value: 'mp3' }
                     )
             )
             .addIntegerOption(option =>
                 option
                     .setName('bitrate')
-                    .setDescription('Recording bitrate (kbps)')
+                    .setDescription('Recording bitrate (kbps) (64-384)')
                     .setMinValue(64)
                     .setMaxValue(384)
             )

@@ -1,4 +1,4 @@
-export * from './types';
-export * from './RecordingSession';
 export * from './RecordingManager';
-export * from './AudioProcessor';
+export * from './RecordingSession';
+export * from './types';
+export * from './audio';

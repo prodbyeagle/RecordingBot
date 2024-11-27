@@ -1,6 +1,4 @@
-import { TextChannel, EmbedBuilder, User } from 'discord.js';
-import { ulid } from 'ulid';
-import { configManager } from '../utils/configManager';
+import { TextChannel, EmbedBuilder, User, Message, ColorResolvable } from 'discord.js';
 
 interface LogEvent {
     type: 'START' | 'STOP' | 'JOIN' | 'LEAVE';
@@ -11,38 +9,73 @@ interface LogEvent {
 export class Logger {
     private logChannel: TextChannel;
     private events = new Map<string, LogEvent[]>();
+    private activeMessages = new Map<string, Message>();
 
     constructor(logChannel: TextChannel) {
         this.logChannel = logChannel;
     }
 
-    logEvent(sessionId: string, event: LogEvent): void {
+    public log(message: string): void {
+        console.log(message);
+    }
+
+    public info(message: string): void {
+        console.log(message);
+    }
+
+    public error(message: string, error?: any): void {
+        console.error(message, error);
+    }
+
+    async logEvent(sessionId: string, event: LogEvent, channelName?: string): Promise<void> {
+        // Store the event
         if (!this.events.has(sessionId)) {
             this.events.set(sessionId, []);
         }
         this.events.get(sessionId)?.push(event);
+
+        // If this is a START event, create initial embed
+        if (event.type === 'START' && channelName) {
+            const embed = new EmbedBuilder()
+                .setTitle('🎙️ Recording in Progress')
+                .setColor(0x00FF00 as ColorResolvable)
+                .addFields([
+                    { name: 'Recording ID', value: sessionId },
+                    { name: 'Channel', value: channelName },
+                    { name: 'Started', value: event.timestamp.toLocaleString() },
+                    { name: 'Started by', value: event.user.tag },
+                    { name: 'Duration', value: '00:00:00' },
+                    { name: 'Status', value: '🟢 Recording...' }
+                ]);
+
+            const message = await this.logChannel.send({ embeds: [embed] });
+            this.activeMessages.set(sessionId, message);
+        }
+        // For other events, update the existing embed
+        else if (this.activeMessages.has(sessionId)) {
+            await this.updateEmbed(sessionId);
+        }
     }
 
-    async createRecordingSummary(sessionId: string, channelName: string): Promise<void> {
-        const events = this.events.get(sessionId) || [];
-        if (events.length === 0) return;
+    private async updateEmbed(sessionId: string): Promise<void> {
+        const message = this.activeMessages.get(sessionId);
+        const events = this.events.get(sessionId);
+        if (!message || !events) return;
 
-        const startEvent = events.find((e: LogEvent) => e.type === 'START');
-        const stopEvent = events.find((e: LogEvent) => e.type === 'STOP');
+        const startEvent = events.find(e => e.type === 'START');
+        if (!startEvent) return;
 
-        if (!startEvent || !stopEvent) return;
+        const now = new Date();
+        const duration = now.getTime() - startEvent.timestamp.getTime();
 
-        const duration = stopEvent.timestamp.getTime() - startEvent.timestamp.getTime();
-        
-        const embed = new EmbedBuilder()
-            .setTitle('Recording Summary')
-            .setColor('#00ff00')
-            .addFields([
-                { name: 'Recording ID', value: sessionId },
-                { name: 'Channel', value: channelName },
-                { name: 'Started', value: startEvent.timestamp.toLocaleString() },
-                { name: 'Duration', value: this.formatDuration(duration) }
-            ]);
+        let status = '🟢 Recording...';
+        let color: ColorResolvable = 0x00FF00; // Green in hex
+
+        const lastEvent = events[events.length - 1];
+        if (lastEvent.type === 'STOP') {
+            status = '🔴 Stopped';
+            color = 0xFF0000; // Red in hex
+        }
 
         let activityLog = '';
         events.forEach((event: LogEvent) => {
@@ -51,21 +84,35 @@ export class Logger {
             
             switch (event.type) {
                 case 'JOIN':
-                    activityLog += `${formattedTime}: ${event.user.tag} joined the recording.\n`;
+                    activityLog += `${formattedTime}: ${event.user.tag} joined\n`;
                     break;
                 case 'LEAVE':
-                    activityLog += `${formattedTime}: ${event.user.tag} left the recording.\n`;
+                    activityLog += `${formattedTime}: ${event.user.tag} left\n`;
                     break;
                 case 'STOP':
-                    activityLog += `${formattedTime}: Recording stopped by ${event.user.tag}.\n`;
+                    activityLog += `${formattedTime}: Recording stopped by ${event.user.tag}\n`;
                     break;
             }
         });
 
-        embed.addFields({ name: 'Activity Log', value: activityLog || 'No activity recorded' });
+        const embed = new EmbedBuilder()
+            .setTitle('🎙️ Recording Status')
+            .setColor(color)
+            .addFields([
+                { name: 'Recording ID', value: sessionId },
+                { name: 'Started', value: startEvent.timestamp.toLocaleString() },
+                { name: 'Duration', value: this.formatDuration(duration) },
+                { name: 'Status', value: status },
+                { name: 'Activity Log', value: activityLog || 'No activity recorded' }
+            ]);
 
-        await this.logChannel.send({ embeds: [embed] });
-        this.events.delete(sessionId);
+        await message.edit({ embeds: [embed] });
+
+        // If recording stopped, clean up
+        if (lastEvent.type === 'STOP') {
+            this.activeMessages.delete(sessionId);
+            this.events.delete(sessionId);
+        }
     }
 
     private formatDuration(ms: number): string {

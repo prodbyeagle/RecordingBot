@@ -1,56 +1,67 @@
 import { VoiceChannel, User } from 'discord.js';
 
+export type AudioFormat = 'wav' | 'mp3';
+
+export interface AudioProcessorOptions {
+    sampleRate: number;
+    channels: number;
+    bitrate: number;
+    format: AudioFormat;
+    noiseSuppression: boolean;
+    echoCancellation: boolean;
+    silenceThreshold: number;
+    bitDepth: number;
+}
+
 export interface RecordingOptions {
-    // Basic recording settings
-    sampleRate?: number;          // Audio sample rate (default: 48000)
-    channels?: number;            // Number of audio channels (default: 2)
-    bitrate?: number;            // Recording bitrate (default: 128)
-    
-    // Advanced settings
-    separateUsers?: boolean;      // Record each user to a separate track
-    format?: 'wav' | 'ogg' | 'mp3'; // Output format
-    
-    // Processing options
-    noiseSuppression?: boolean;   // Enable noise suppression
-    echoCancellation?: boolean;   // Enable echo cancellation
-    silenceThreshold?: number;    // Silence detection threshold in dB
-    
-    // Storage settings
-    storageDir?: string;         // Custom storage directory
-    filenamePattern?: string;    // Custom filename pattern with variables like {date}, {user}, {channel}
-    
-    // Limits
-    maxDuration?: number;        // Maximum recording duration in minutes
-    maxSize?: number;            // Maximum file size in MB
+    format: AudioFormat;
+    sampleRate: number;
+    channels: number;
+    bitrate: number;
+    noiseSuppression: boolean;
+    echoCancellation: boolean;
+    silenceThreshold: number;
+    storageDir?: string;
+    filenamePattern?: string;
+    maxDuration?: number;
+    maxSize?: number;
+    separateUsers?: boolean;
 }
 
 export interface RecordingMetadata {
-    id: string;                  // Unique recording ID
-    guildId: string;            // Discord guild ID
-    channelId: string;          // Discord channel ID
-    startTime: Date;            // Recording start time
-    endTime?: Date;             // Recording end time
-    participants: string[];      // User IDs of participants
-    initiator: string;          // User ID who started the recording
-    options: RecordingOptions;   // Applied recording options
-    fileSize?: number;          // Final file size in bytes
-    duration?: number;          // Final duration in seconds
+    sessionId: string;
+    guildId: string;
+    channelId: string;
+    startTime: Date;
+    endTime?: Date;
+    options: RecordingOptions;
+    participants: string[];
+    initiator: string;
 }
 
 export interface RecordingStats {
-    peakAmplitude: number;      // Peak audio amplitude
-    averageAmplitude: number;   // Average audio amplitude
-    silentSegments: number;     // Number of silent segments
-    totalSize: number;          // Current file size
-    duration: number;           // Current duration
+    peakAmplitude: number;
+    averageAmplitude: number;
+    silentSegments: number;
+    totalSamples: number;
 }
 
-export interface RecordingEvent {
-    type: 'start' | 'stop' | 'pause' | 'resume' | 'user-join' | 'user-leave' | 'error';
-    timestamp: Date;
+export type RecordingEvent = 
+    | 'start'
+    | 'stop'
+    | 'pause'
+    | 'resume'
+    | 'error'
+    | 'userJoined'
+    | 'userLeft'
+    | 'speakingStart'
+    | 'speakingEnd';
+
+export interface RecordingEventData {
+    userId?: string;
+    error?: Error;
     metadata?: RecordingMetadata;
     stats?: RecordingStats;
-    error?: Error;
 }
 
-export type RecordingEventHandler = (event: RecordingEvent) => void | Promise<void>;
+export type RecordingEventHandler = (event: RecordingEvent, data?: RecordingEventData) => Promise<void>;
